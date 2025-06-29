@@ -140,11 +140,15 @@ const AnimatedTorus = () => {
     // Zachowaj oryginalne pozycje wierzchołków
     const originalPositions = torusGeometry.attributes.position.array.slice();
     
+    // Wykryj ekran dotykowy i dostosuj grubość linii
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const lineWidth = isTouchDevice ? 1 : 2; // Cieńsze linie na ekranach dotykowych
+    
     // Wireframe material
     const torusMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       wireframe: true,
-      wireframeLinewidth: 2
+      wireframeLinewidth: lineWidth
     });
 
     // Create torus mesh
@@ -190,7 +194,7 @@ const AnimatedTorus = () => {
           const tubeRadius = Math.sqrt(tubeRadial * tubeRadial + tubeVertical * tubeVertical);
           const poloidalAngle = Math.atan2(tubeVertical, tubeRadial);
           
-          const poloidalRotation = time * poloidalSpeedRef.current + toroidalAngle * 1.0; // użyj ref
+          const poloidalRotation = time * poloidalSpeedRef.current; // usuń fazowanie dla równomierności
           const newPoloidalAngle = poloidalAngle + poloidalRotation;
           
           const newTubeRadial = tubeRadius * Math.cos(newPoloidalAngle);
