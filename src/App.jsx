@@ -29,13 +29,170 @@ const AnimatedTorus = () => {
   // Transition state
   const [_isTransitioning, setIsTransitioning] = useState(false);
 
-  // Target values for transition
+  // Auto-animation state
+  const [isAutoAnimating, setIsAutoAnimating] = useState(false);
+  const [isTransitioningToAuto, setIsTransitioningToAuto] = useState(false);
+  const autoAnimationRef = useRef(null);
+  const autoTransitionRef = useRef(null);
+  const autoAnimationStartTime = useRef(null);
+  const autoTransitionStartTime = useRef(null);
+  const songStartTime = useRef(null);
+  const baseRotation = useRef({ x: 0, y: 0 });
+  const baseZoom = useRef(5);
+
+  // Target values for initial transition
   const TARGET_CAMERA_X = -Math.PI / 2; // -90 degrees
   const TARGET_CAMERA_Y = 0; // 0 degrees
   const TARGET_POLOIDAL_SPEED = 0.04;
   const TARGET_ROTATIONAL_SPEED = 0.04;
   const TARGET_ZOOM = 1.7;
   const TRANSITION_DURATION = 2000; // 2 seconds
+  
+  // Target values for auto-animation transition
+  const AUTO_TRANSITION_DURATION = 3000; // 3 seconds to ease into auto-animation
+
+  // Single transition: move to torus position, then start auto-animation
+  const startTransitionToTorusAndAuto = useCallback(() => {
+    if (transitionRef.current) return; // Already transitioning
+    
+    console.log('Starting transition to torus position + auto-animation');
+    setIsTransitioning(true);
+    const startTime = Date.now();
+    
+    // Capture starting values
+    const startValues = {
+      cameraX: cameraRotation.x,
+      cameraY: cameraRotation.y,
+      zoom: zoom,
+      poloidalSpeed: poloidalSpeed,
+      rotationalSpeed: rotationalSpeed
+    };
+
+    const transitionAnimate = () => {
+      if (!audioRef.current || audioRef.current.paused) {
+        setIsTransitioning(false);
+        transitionRef.current = null;
+        return;
+      }
+
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / TRANSITION_DURATION, 1);
+      const easedProgress = easeInOutCubic(progress);
+
+      // Calculate new values - transition to torus position
+      const newCameraX = startValues.cameraX + (TARGET_CAMERA_X - startValues.cameraX) * easedProgress;
+      const newCameraY = startValues.cameraY + (TARGET_CAMERA_Y - startValues.cameraY) * easedProgress;
+      const newZoom = startValues.zoom + (TARGET_ZOOM - startValues.zoom) * easedProgress;
+      const newPoloidalSpeed = startValues.poloidalSpeed + (TARGET_POLOIDAL_SPEED - startValues.poloidalSpeed) * easedProgress;
+      const newRotationalSpeed = startValues.rotationalSpeed + (TARGET_ROTATIONAL_SPEED - startValues.rotationalSpeed) * easedProgress;
+
+      // Update all states
+      setCameraRotation({ x: newCameraX, y: newCameraY });
+      setZoom(newZoom);
+      setPoloidalSpeed(newPoloidalSpeed);
+      setRotationalSpeed(newRotationalSpeed);
+      
+      // Update refs for the 3D animation
+      poloidalSpeedRef.current = newPoloidalSpeed;
+      rotationalSpeedRef.current = newRotationalSpeed;
+
+      if (progress < 1) {
+        transitionRef.current = requestAnimationFrame(transitionAnimate);
+      } else {
+        console.log('Transition to torus completed, now starting auto-animation');
+        setIsTransitioning(false);
+        transitionRef.current = null;
+        
+        // Set base values for auto-animation
+        baseRotation.current = { x: TARGET_CAMERA_X, y: TARGET_CAMERA_Y };
+        baseZoom.current = TARGET_ZOOM;
+        
+        console.log('Base set for auto-animation:', baseRotation.current, 'zoom:', baseZoom.current);
+        
+        // Start auto-animation immediately after transition
+        startAutoTransition();
+      }
+    };
+
+    transitionRef.current = requestAnimationFrame(transitionAnimate);
+  }, [cameraRotation.x, cameraRotation.y, zoom, poloidalSpeed, rotationalSpeed]);
+
+  // Smooth transition into auto-animation using blend approach
+  const startAutoTransition = useCallback(() => {
+    if (autoTransitionRef.current || autoAnimationRef.current) return; // Already transitioning or animating
+    
+    console.log('Starting smooth blend to auto-animation!'); // Debug log
+    setIsTransitioningToAuto(true);
+    autoTransitionStartTime.current = Date.now();
+    autoAnimationStartTime.current = Date.now(); // Start auto-animation timer immediately
+    
+    // Use the TARGET TORUS POSITION as the static base, not current camera position
+    const staticTorusPosition = {
+      x: TARGET_CAMERA_X,  // -Math.PI / 2
+      y: TARGET_CAMERA_Y,  // 0
+      zoom: TARGET_ZOOM    // 1.7
+    };
+    
+    // Set base position for auto-animation calculations to the torus position
+    baseRotation.current = { x: TARGET_CAMERA_X, y: TARGET_CAMERA_Y };
+    baseZoom.current = TARGET_ZOOM;
+    
+    console.log('Static torus position for transition:', staticTorusPosition);
+    console.log('Base for auto-animation:', baseRotation.current);
+
+    const transitionAnimate = () => {
+      if (!audioRef.current || audioRef.current.paused) {
+        console.log('Audio stopped during auto-transition');
+        setIsTransitioningToAuto(false);
+        autoTransitionRef.current = null;
+        return;
+      }
+
+      const transitionElapsed = Date.now() - autoTransitionStartTime.current;
+      const transitionProgress = Math.min(transitionElapsed / AUTO_TRANSITION_DURATION, 1);
+      const blendFactor = easeInOutCubic(transitionProgress); // 0 = static torus position, 1 = full auto
+      
+      // Calculate auto-animation values using continuous time
+      const autoElapsed = (Date.now() - autoAnimationStartTime.current) / 1000;
+      
+      // Auto-animation parameters
+      const cameraFrequency = 0.2;
+      const zoomFrequency = 0.15;
+      const maxAngleRange = Math.PI / 2;
+      
+      // Calculate auto-animation target values FROM the torus position
+      const autoXMovement = Math.sin(autoElapsed * cameraFrequency) * maxAngleRange * 0.5;
+      const autoYMovement = Math.cos(autoElapsed * cameraFrequency * 0.7) * maxAngleRange * 0.8;
+      const autoZoomMovement = Math.sin(autoElapsed * zoomFrequency) * 0.8;
+      
+      const autoTargetX = Math.max(-Math.PI/2, Math.min(Math.PI/2, 
+        baseRotation.current.x + autoXMovement
+      ));
+      const autoTargetY = baseRotation.current.y + autoYMovement;
+      const autoTargetZoom = Math.max(0.6, Math.min(2.2, 1.4 + autoZoomMovement));
+      
+      // Blend between static TORUS position and auto-animation
+      const newCameraX = staticTorusPosition.x + (autoTargetX - staticTorusPosition.x) * blendFactor;
+      const newCameraY = staticTorusPosition.y + (autoTargetY - staticTorusPosition.y) * blendFactor;
+      const newZoom = staticTorusPosition.zoom + (autoTargetZoom - staticTorusPosition.zoom) * blendFactor;
+      
+      setCameraRotation({ x: newCameraX, y: newCameraY });
+      setZoom(newZoom);
+      
+      if (transitionProgress < 1) {
+        autoTransitionRef.current = requestAnimationFrame(transitionAnimate);
+      } else {
+        console.log('Blend transition completed, switching to full auto-animation');
+        setIsTransitioningToAuto(false);
+        autoTransitionRef.current = null;
+        
+        // Continue with full auto-animation (timer already running)
+        startAutoAnimation();
+      }
+    };
+
+    autoTransitionRef.current = requestAnimationFrame(transitionAnimate);
+  }, []);
 
   // Get the base URL for production deployment
   const getAssetUrl = (filename) => {
@@ -75,7 +232,7 @@ const AnimatedTorus = () => {
       artist: "Pronoia", 
       url: getAssetUrl("AUD-20241228-WA0005.mp3")
     },
-        {
+    {
       title: "ośem",
       artist: "Pronoia", 
       url: getAssetUrl("osmy.mp3")
@@ -87,54 +244,84 @@ const AnimatedTorus = () => {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   };
 
-  // Simple transition function that works
-  const startTransition = () => {
-    if (transitionRef.current) return; // Already transitioning
+  // Auto-animation function (continues from transition)
+  const startAutoAnimation = useCallback(() => {
+    if (autoAnimationRef.current) return; // Already animating
     
-    setIsTransitioning(true);
-    const startTime = Date.now();
-    
-    // Capture starting values at the moment transition begins
-    const startValues = {
-      cameraX: cameraRotation.x,
-      cameraY: cameraRotation.y,
-      zoom: zoom,
-      poloidalSpeed: poloidalSpeed,
-      rotationalSpeed: rotationalSpeed
-    };
+    console.log('Starting full auto-animation (continuing from transition)!'); // Debug log
+    setIsAutoAnimating(true);
+    // Note: autoAnimationStartTime is already set during transition for continuity
 
     const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / TRANSITION_DURATION, 1);
-      const easedProgress = easeInOutCubic(progress);
+      // Check if we should continue
+      if (!audioRef.current || audioRef.current.paused) {
+        console.log('Audio stopped, ending auto-animation');
+        setIsAutoAnimating(false);
+        autoAnimationRef.current = null;
+        return;
+      }
 
+      // Use the continuous timer that started during transition
+      const elapsed = (Date.now() - autoAnimationStartTime.current) / 1000; // in seconds
+      
+      // Slow, meditative movement speeds
+      const cameraFrequency = 0.2; // Very slow camera movement
+      const zoomFrequency = 0.15; // Even slower zoom changes
+      
+      // Create smooth movements up to 90 degrees
+      const maxAngleRange = Math.PI / 2; // 90 degrees in radians
+      
+      // X rotation: smooth sine wave between -45° and +45° from base position
+      const xMovement = Math.sin(elapsed * cameraFrequency) * maxAngleRange * 0.5;
+      
+      // Y rotation: smooth cosine wave for different phase, full 90° range
+      const yMovement = Math.cos(elapsed * cameraFrequency * 0.7) * maxAngleRange * 0.8;
+      
+      // Zoom: smooth oscillation between 0.6 and 2.2
+      const zoomCenter = 1.4;
+      const zoomRange = 0.8;
+      const zoomMovement = Math.sin(elapsed * zoomFrequency) * zoomRange;
+      
       // Calculate new values
-      const newCameraX = startValues.cameraX + (TARGET_CAMERA_X - startValues.cameraX) * easedProgress;
-      const newCameraY = startValues.cameraY + (TARGET_CAMERA_Y - startValues.cameraY) * easedProgress;
-      const newZoom = startValues.zoom + (TARGET_ZOOM - startValues.zoom) * easedProgress;
-      const newPoloidalSpeed = startValues.poloidalSpeed + (TARGET_POLOIDAL_SPEED - startValues.poloidalSpeed) * easedProgress;
-      const newRotationalSpeed = startValues.rotationalSpeed + (TARGET_ROTATIONAL_SPEED - startValues.rotationalSpeed) * easedProgress;
-
-      // Update all states
+      const newCameraX = Math.max(-Math.PI/2, Math.min(Math.PI/2, 
+        baseRotation.current.x + xMovement
+      ));
+      const newCameraY = baseRotation.current.y + yMovement;
+      const newZoom = Math.max(0.6, Math.min(2.2, zoomCenter + zoomMovement));
+      
+      // Debug log every 120 frames (about every 2 seconds)
+      if (Math.floor(elapsed * 60) % 120 === 0) {
+        console.log(`Auto-animation: elapsed=${elapsed.toFixed(1)}s, x=${newCameraX.toFixed(2)}, y=${newCameraY.toFixed(2)}, zoom=${newZoom.toFixed(2)}`);
+      }
+      
+      // Apply the changes
       setCameraRotation({ x: newCameraX, y: newCameraY });
       setZoom(newZoom);
-      setPoloidalSpeed(newPoloidalSpeed);
-      setRotationalSpeed(newRotationalSpeed);
-      
-      // Update refs for the 3D animation
-      poloidalSpeedRef.current = newPoloidalSpeed;
-      rotationalSpeedRef.current = newRotationalSpeed;
 
-      if (progress < 1) {
-        transitionRef.current = requestAnimationFrame(animate);
-      } else {
-        setIsTransitioning(false);
-        transitionRef.current = null;
-      }
+      autoAnimationRef.current = requestAnimationFrame(animate);
     };
 
-    transitionRef.current = requestAnimationFrame(animate);
-  };
+    // Start the animation loop
+    autoAnimationRef.current = requestAnimationFrame(animate);
+  }, []);
+
+  // Stop auto-animation and transition
+  const stopAutoAnimation = useCallback(() => {
+    console.log('Stopping auto-animation and transitions'); // Debug log
+    
+    if (autoAnimationRef.current) {
+      cancelAnimationFrame(autoAnimationRef.current);
+      autoAnimationRef.current = null;
+    }
+    
+    if (autoTransitionRef.current) {
+      cancelAnimationFrame(autoTransitionRef.current);
+      autoTransitionRef.current = null;
+    }
+    
+    setIsAutoAnimating(false);
+    setIsTransitioningToAuto(false);
+  }, []);
 
   // Update camera position based on rotation and zoom
   const updateCamera = useCallback(() => {
@@ -150,11 +337,15 @@ const AnimatedTorus = () => {
     }
   }, [zoom, cameraRotation]);
 
-  // Mouse event handlers (restored to original working version)
+  // Mouse event handlers with auto-animation stopping
   const handleMouseDown = useCallback((event) => {
     setIsMouseDown(true);
     setMousePos({ x: event.clientX, y: event.clientY });
-  }, []);
+    // Stop auto-animation when user takes manual control
+    if (isAutoAnimating || isTransitioningToAuto) {
+      stopAutoAnimation();
+    }
+  }, [isAutoAnimating, isTransitioningToAuto, stopAutoAnimation]);
 
   const handleMouseMove = useCallback((event) => {
     if (!isMouseDown) return;
@@ -174,13 +365,17 @@ const AnimatedTorus = () => {
     setIsMouseDown(false);
   }, []);
 
-  // Touch event handlers (restored to original working version)
+  // Touch event handlers with auto-animation stopping
   const handleTouchStart = useCallback((event) => {
     event.preventDefault();
     const touch = event.touches[0];
     setIsMouseDown(true);
     setMousePos({ x: touch.clientX, y: touch.clientY });
-  }, []);
+    // Stop auto-animation when user takes manual control
+    if (isAutoAnimating || isTransitioningToAuto) {
+      stopAutoAnimation();
+    }
+  }, [isAutoAnimating, isTransitioningToAuto, stopAutoAnimation]);
 
   const handleTouchMove = useCallback((event) => {
     event.preventDefault();
@@ -203,12 +398,17 @@ const AnimatedTorus = () => {
     setIsMouseDown(false);
   }, []);
 
-  // Handle zoom change (restored to original)
+  // Handle zoom change with auto-animation stopping
   const handleZoomChange = useCallback((event) => {
-    setZoom(parseFloat(event.target.value));
-  }, []);
+    const newZoom = parseFloat(event.target.value);
+    setZoom(newZoom);
+    // Stop auto-animation when user manually adjusts zoom
+    if (isAutoAnimating || isTransitioningToAuto) {
+      stopAutoAnimation();
+    }
+  }, [isAutoAnimating, isTransitioningToAuto, stopAutoAnimation]);
 
-  // Handle speed changes (restored to original)
+  // Handle speed changes
   const handlePoloidalSpeedChange = useCallback((event) => {
     const newSpeed = parseFloat(event.target.value);
     setPoloidalSpeed(newSpeed);
@@ -227,38 +427,48 @@ const AnimatedTorus = () => {
       if (isPlaying) {
         audioRef.current.pause();
         setIsPlaying(false);
+        stopAutoAnimation();
       } else {
-        // Start transition when play is pressed
-        startTransition();
-        
+        // Start playing and begin transition immediately
         audioRef.current.play().then(() => {
           setIsPlaying(true);
+          songStartTime.current = Date.now();
+          
+          console.log('Song started, beginning immediate transition to torus + auto-animation!'); // Debug log
+          
+          // Start transition immediately
+          startTransitionToTorusAndAuto();
         }).catch(console.error);
       }
     }
-  }, [isPlaying]);
+  }, [isPlaying, startTransitionToTorusAndAuto]);
 
   const nextSong = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
     }
     setIsPlaying(false);
+    stopAutoAnimation();
+    songStartTime.current = null;
     const nextIndex = (currentSongIndex + 1) % songs.length;
     setCurrentSongIndex(nextIndex);
-  }, [currentSongIndex, songs.length]);
+  }, [currentSongIndex, songs.length, stopAutoAnimation]);
 
   const previousSong = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
     }
     setIsPlaying(false);
+    stopAutoAnimation();
+    songStartTime.current = null;
     const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
     setCurrentSongIndex(prevIndex);
-  }, [currentSongIndex, songs.length]);
+  }, [currentSongIndex, songs.length, stopAutoAnimation]);
 
   const handleSongEnd = useCallback(() => {
+    stopAutoAnimation();
     nextSong();
-  }, [nextSong]);
+  }, [nextSong, stopAutoAnimation]);
 
   useEffect(() => {
     // Initialize ref values
@@ -385,6 +595,12 @@ const AnimatedTorus = () => {
       }
       if (transitionRef.current) {
         cancelAnimationFrame(transitionRef.current);
+      }
+      if (autoAnimationRef.current) {
+        cancelAnimationFrame(autoAnimationRef.current);
+      }
+      if (autoTransitionRef.current) {
+        cancelAnimationFrame(autoTransitionRef.current);
       }
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
@@ -598,26 +814,48 @@ const AnimatedTorus = () => {
       {/* Camera Orientation - Desktop */}
       <div className="absolute bottom-4 left-4 lg:block hidden text-white font-mono text-sm bg-black bg-opacity-70 p-3 rounded-lg">
         <div className="text-center">
-          <div className="text-gray-400 text-xs mb-1">Camera</div>
+          <div className="text-gray-400 text-xs mb-1 flex items-center justify-center">
+            Camera
+            {(isAutoAnimating || isTransitioningToAuto) && (
+              <span className="ml-2 text-green-400 text-xs animate-pulse">●</span>
+            )}
+          </div>
           <div className="text-white text-xs">
             X: {(cameraRotation.x * 180 / Math.PI).toFixed(1)}°
           </div>
           <div className="text-white text-xs">
             Y: {(cameraRotation.y * 180 / Math.PI).toFixed(1)}°
           </div>
+          {isTransitioningToAuto && (
+            <div className="text-yellow-400 text-xs mt-1">Transitioning</div>
+          )}
+          {isAutoAnimating && (
+            <div className="text-green-400 text-xs mt-1">Auto</div>
+          )}
         </div>
       </div>
 
       {/* Camera Orientation - Mobile */}
       <div className="absolute bottom-4 left-4 lg:hidden block text-white font-mono text-xs bg-black bg-opacity-70 p-2 rounded-lg">
         <div className="text-center">
-          <div className="text-gray-400 text-xs mb-1">Camera</div>
+          <div className="text-gray-400 text-xs mb-1 flex items-center justify-center">
+            Camera
+            {(isAutoAnimating || isTransitioningToAuto) && (
+              <span className="ml-1 text-green-400 text-xs animate-pulse">●</span>
+            )}
+          </div>
           <div className="text-white text-xs">
             X: {(cameraRotation.x * 180 / Math.PI).toFixed(1)}°
           </div>
           <div className="text-white text-xs">
             Y: {(cameraRotation.y * 180 / Math.PI).toFixed(1)}°
           </div>
+          {isTransitioningToAuto && (
+            <div className="text-yellow-400 text-xs mt-1">Transitioning</div>
+          )}
+          {isAutoAnimating && (
+            <div className="text-green-400 text-xs mt-1">Auto</div>
+          )}
         </div>
       </div>
 
