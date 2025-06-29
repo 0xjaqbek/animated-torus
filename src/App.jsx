@@ -25,22 +25,43 @@ const AnimatedTorus = () => {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const audioRef = useRef(null);
 
+    // Get the base URL for production deployment
+  const getAssetUrl = (filename) => {
+    const base = import.meta.env.BASE_URL || '/';
+    return `${base}${filename}`;
+  };
+
   // Placeholder songs - you can edit these links and titles later
   const songs = [
     {
-      title: "OŚem",
+      title: "jedynka",
       artist: "Pronoia",
-      url: "./src/assets/default.mp3" // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0000.mp3") // Replace with your song URL
     },
     {
-      title: "Song Title 2", 
-      artist: "Artist Name",
-      url: "path/to/your/song2.mp3" // Replace with your song URL
+      title: "dwojka", 
+      artist: "Pronoia",
+      url: getAssetUrl("AUD-20241228-WA0001.mp3") // Replace with your song URL
     },
     {
-      title: "Song Title 3",
-      artist: "Artist Name", 
-      url: "path/to/your/song3.mp3" // Replace with your song URL
+      title: "trzeci",
+      artist: "Pronoia", 
+      url: getAssetUrl("AUD-20241228-WA0002.mp3") // Replace with your song URL
+    },
+        {
+      title: "damiana",
+      artist: "Pronoia",
+      url: getAssetUrl("AUD-20241228-WA0003.mp3") // Replace with your song URL
+    },
+    {
+      title: "siaja", 
+      artist: "Pronoia",
+      url: getAssetUrl("AUD-20241228-WA0004.mp3") // Replace with your song URL
+    },
+    {
+      title: "ośem",
+      artist: "Pronoia", 
+      url: getAssetUrl("AUD-20241228-WA0005.mp3") // Replace with your song URL
     }
   ];
 
