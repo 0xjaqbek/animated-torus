@@ -11,6 +11,7 @@ const AnimatedTorus = () => {
   const cameraRef = useRef(null);
   const poloidalSpeedRef = useRef(0);
   const rotationalSpeedRef = useRef(0);
+  const transitionRef = useRef(null);
   
   // Mouse controls state
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -20,18 +21,29 @@ const AnimatedTorus = () => {
   const [poloidalSpeed, setPoloidalSpeed] = useState(0);
   const [rotationalSpeed, setRotationalSpeed] = useState(0);
 
-  // Music player state (ADDED)
+  // Music player state
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const audioRef = useRef(null);
 
-  // Get the base URL for production deployment (ADDED)
+  // Transition state
+  const [_isTransitioning, setIsTransitioning] = useState(false);
+
+  // Target values for transition
+  const TARGET_CAMERA_X = -Math.PI / 2; // -90 degrees
+  const TARGET_CAMERA_Y = 0; // 0 degrees
+  const TARGET_POLOIDAL_SPEED = 0.04;
+  const TARGET_ROTATIONAL_SPEED = 0.04;
+  const TARGET_ZOOM = 1.7;
+  const TRANSITION_DURATION = 2000; // 2 seconds
+
+  // Get the base URL for production deployment
   const getAssetUrl = (filename) => {
     const base = import.meta.env.BASE_URL || '/';
     return `${base}${filename}`;
   };
 
-  // Placeholder songs (ADDED)
+  // Placeholder songs
   const songs = [
     {
       title: "jedynka",
@@ -51,19 +63,78 @@ const AnimatedTorus = () => {
     {
       title: "damiana",
       artist: "Pronoia",
-      url: getAssetUrl("AUD-20241228-WA0003.mp3")
+      url: getAssetUrl("AUD-20241228-WA0004.mp3")
     },
     {
       title: "siaja", 
       artist: "Pronoia",
-      url: getAssetUrl("AUD-20241228-WA0004.mp3")
+      url: getAssetUrl("AUD-20241228-WA0003.mp3")
     },
     {
-      title: "ośem",
+      title: "smutny",
       artist: "Pronoia", 
       url: getAssetUrl("AUD-20241228-WA0005.mp3")
-    }
+    },
+        {
+      title: "ośem",
+      artist: "Pronoia", 
+      url: getAssetUrl("osmy.mp3")
+    },
   ];
+
+  // Easing function for smooth transitions
+  const easeInOutCubic = (t) => {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  };
+
+  // Simple transition function that works
+  const startTransition = () => {
+    if (transitionRef.current) return; // Already transitioning
+    
+    setIsTransitioning(true);
+    const startTime = Date.now();
+    
+    // Capture starting values at the moment transition begins
+    const startValues = {
+      cameraX: cameraRotation.x,
+      cameraY: cameraRotation.y,
+      zoom: zoom,
+      poloidalSpeed: poloidalSpeed,
+      rotationalSpeed: rotationalSpeed
+    };
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / TRANSITION_DURATION, 1);
+      const easedProgress = easeInOutCubic(progress);
+
+      // Calculate new values
+      const newCameraX = startValues.cameraX + (TARGET_CAMERA_X - startValues.cameraX) * easedProgress;
+      const newCameraY = startValues.cameraY + (TARGET_CAMERA_Y - startValues.cameraY) * easedProgress;
+      const newZoom = startValues.zoom + (TARGET_ZOOM - startValues.zoom) * easedProgress;
+      const newPoloidalSpeed = startValues.poloidalSpeed + (TARGET_POLOIDAL_SPEED - startValues.poloidalSpeed) * easedProgress;
+      const newRotationalSpeed = startValues.rotationalSpeed + (TARGET_ROTATIONAL_SPEED - startValues.rotationalSpeed) * easedProgress;
+
+      // Update all states
+      setCameraRotation({ x: newCameraX, y: newCameraY });
+      setZoom(newZoom);
+      setPoloidalSpeed(newPoloidalSpeed);
+      setRotationalSpeed(newRotationalSpeed);
+      
+      // Update refs for the 3D animation
+      poloidalSpeedRef.current = newPoloidalSpeed;
+      rotationalSpeedRef.current = newRotationalSpeed;
+
+      if (progress < 1) {
+        transitionRef.current = requestAnimationFrame(animate);
+      } else {
+        setIsTransitioning(false);
+        transitionRef.current = null;
+      }
+    };
+
+    transitionRef.current = requestAnimationFrame(animate);
+  };
 
   // Update camera position based on rotation and zoom
   const updateCamera = useCallback(() => {
@@ -79,7 +150,7 @@ const AnimatedTorus = () => {
     }
   }, [zoom, cameraRotation]);
 
-  // Mouse event handlers
+  // Mouse event handlers (restored to original working version)
   const handleMouseDown = useCallback((event) => {
     setIsMouseDown(true);
     setMousePos({ x: event.clientX, y: event.clientY });
@@ -103,7 +174,7 @@ const AnimatedTorus = () => {
     setIsMouseDown(false);
   }, []);
 
-  // Touch event handlers
+  // Touch event handlers (restored to original working version)
   const handleTouchStart = useCallback((event) => {
     event.preventDefault();
     const touch = event.touches[0];
@@ -132,12 +203,12 @@ const AnimatedTorus = () => {
     setIsMouseDown(false);
   }, []);
 
-  // Handle zoom change
+  // Handle zoom change (restored to original)
   const handleZoomChange = useCallback((event) => {
     setZoom(parseFloat(event.target.value));
   }, []);
 
-  // Handle speed changes
+  // Handle speed changes (restored to original)
   const handlePoloidalSpeedChange = useCallback((event) => {
     const newSpeed = parseFloat(event.target.value);
     setPoloidalSpeed(newSpeed);
@@ -150,38 +221,37 @@ const AnimatedTorus = () => {
     rotationalSpeedRef.current = newSpeed;
   }, []);
 
-  // Music control functions (ADDED)
+  // Music control functions
   const togglePlayPause = useCallback(() => {
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
+        setIsPlaying(false);
       } else {
-        audioRef.current.play().catch(console.error);
+        // Start transition when play is pressed
+        startTransition();
+        
+        audioRef.current.play().then(() => {
+          setIsPlaying(true);
+        }).catch(console.error);
       }
-      setIsPlaying(!isPlaying);
     }
   }, [isPlaying]);
 
   const nextSong = useCallback(() => {
-    // Pause current song and reset play button
     if (audioRef.current) {
       audioRef.current.pause();
     }
     setIsPlaying(false);
-    
-    // Change to next song
     const nextIndex = (currentSongIndex + 1) % songs.length;
     setCurrentSongIndex(nextIndex);
   }, [currentSongIndex, songs.length]);
 
   const previousSong = useCallback(() => {
-    // Pause current song and reset play button
     if (audioRef.current) {
       audioRef.current.pause();
     }
     setIsPlaying(false);
-    
-    // Change to previous song
     const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
     setCurrentSongIndex(prevIndex);
   }, [currentSongIndex, songs.length]);
@@ -191,7 +261,7 @@ const AnimatedTorus = () => {
   }, [nextSong]);
 
   useEffect(() => {
-    // Inicjalizuj ref values
+    // Initialize ref values
     poloidalSpeedRef.current = 0;
     rotationalSpeedRef.current = 0;
     
@@ -220,24 +290,19 @@ const AnimatedTorus = () => {
       mountRef.current.appendChild(renderer.domElement);
     }
 
-    // Torus geometry - zwiększam segmenty dla płynniejszej animacji
+    // Torus geometry
     const torusGeometry = new THREE.TorusGeometry(1, 0.4, 32, 100);
-    
-    // Zachowaj oryginalne pozycje wierzchołków
     const originalPositions = torusGeometry.attributes.position.array.slice();
     
-    // Wykryj ekran dotykowy i dostosuj grubość linii
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const lineWidth = isTouchDevice ? 1 : 2; // Cieńsze linie na ekranach dotykowych
+    const lineWidth = isTouchDevice ? 1 : 2;
     
-    // Wireframe material
     const torusMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       wireframe: true,
       wireframeLinewidth: lineWidth
     });
 
-    // Create torus mesh
     const torus = new THREE.Mesh(torusGeometry, torusMaterial);
     scene.add(torus);
     torusRef.current = torus;
@@ -253,24 +318,20 @@ const AnimatedTorus = () => {
     const animate = () => {
       time += 0.02;
 
-      // WERSJA 15 rotacja + idealny ruch poloidalny
       if (torusRef.current) {
         const geometry = torusRef.current.geometry;
         const positions = geometry.attributes.position.array;
         
         for (let i = 0; i < positions.length; i += 3) {
-          // Pobierz oryginalne pozycje
           const origX = originalPositions[i];
           const origY = originalPositions[i + 1];
           const origZ = originalPositions[i + 2];
           
-          // WERSJA 15: Lekka rotacja wokół osi Z (przeciwny kierunek)
           const mainRadius = Math.sqrt(origX * origX + origY * origY);
-          const rotationSpeed = -time * rotationalSpeedRef.current + mainRadius * 1.5; // minus dla przeciwnego kierunku
+          const rotationSpeed = -time * rotationalSpeedRef.current + mainRadius * 1.5;
           const cosAngle = Math.cos(rotationSpeed);
           const sinAngle = Math.sin(rotationSpeed);
           
-          // Ruch poloidalny w płaszczyźnie R-Z (zachowany idealny)
           const toroidalAngle = Math.atan2(origY, origX);
           
           const tubeCenter = 1.0;
@@ -280,24 +341,22 @@ const AnimatedTorus = () => {
           const tubeRadius = Math.sqrt(tubeRadial * tubeRadial + tubeVertical * tubeVertical);
           const poloidalAngle = Math.atan2(tubeVertical, tubeRadial);
           
-          const poloidalRotation = time * poloidalSpeedRef.current; // usuń fazowanie dla równomierności
+          const poloidalRotation = time * poloidalSpeedRef.current;
           const newPoloidalAngle = poloidalAngle + poloidalRotation;
           
           const newTubeRadial = tubeRadius * Math.cos(newPoloidalAngle);
           const newTubeVertical = tubeRadius * Math.sin(newPoloidalAngle);
           const newMainRadius = tubeCenter + newTubeRadial;
           
-          // Najpierw poloidalny, potem rotacja Z
           const poloidalX = newMainRadius * Math.cos(toroidalAngle);
           const poloidalY = newMainRadius * Math.sin(toroidalAngle);
           
-          // Zastosuj lekkę rotację wokół osi Z
           const finalX = poloidalX * cosAngle - poloidalY * sinAngle;
           const finalY = poloidalX * sinAngle + poloidalY * cosAngle;
           
-          positions[i] = finalX;              // X
-          positions[i + 1] = finalY;          // Y  
-          positions[i + 2] = newTubeVertical; // Z
+          positions[i] = finalX;
+          positions[i + 1] = finalY;
+          positions[i + 2] = newTubeVertical;
         }
         
         geometry.attributes.position.needsUpdate = true;
@@ -323,6 +382,9 @@ const AnimatedTorus = () => {
       window.removeEventListener('resize', handleResize);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+      }
+      if (transitionRef.current) {
+        cancelAnimationFrame(transitionRef.current);
       }
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
@@ -374,7 +436,7 @@ const AnimatedTorus = () => {
     <div className="w-full h-screen bg-black overflow-hidden relative">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing touch-none" />
       
-      {/* Audio element (ADDED) */}
+      {/* Audio element */}
       <audio 
         ref={audioRef}
         src={songs[currentSongIndex].url}
@@ -439,10 +501,9 @@ const AnimatedTorus = () => {
         </div>
       </div>
 
-      {/* Music Player - Desktop: top-right, Mobile: bottom-center (ADDED) */}
+      {/* Music Player - Desktop: top-right, Mobile: bottom-center */}
       <div className="absolute top-4 right-4 lg:block hidden bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
         {/* Desktop Music Player */}
-        {/* Song Info */}
         <div className="text-center mb-3 min-w-[200px]">
           <div className="flex items-center justify-center mb-2">
             <Music size={16} className="text-white mr-2" />
@@ -488,9 +549,8 @@ const AnimatedTorus = () => {
         </div>
       </div>
 
-      {/* Mobile Music Player - Bottom (ADDED) */}
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 lg:hidden block bg-black bg-opacity-90 p-3 rounded-lg border border-gray-600 w-11/12 max-w-sm">
-        {/* Mobile Song Info - Compact */}
+      {/* Mobile Music Player - Bottom */}
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 lg:hidden block bg-black bg-opacity-90 p-3 rounded-lg border border-gray-600 w-11/12 max-w-sm">
         <div className="text-center mb-2">
           <div className="flex items-center justify-center mb-1">
             <Music size={14} className="text-white mr-2" />
@@ -504,7 +564,6 @@ const AnimatedTorus = () => {
           </div>
         </div>
         
-        {/* Mobile Music Controls - Compact */}
         <div className="flex items-center justify-center space-x-4">
           <button
             onClick={previousSong}
@@ -550,7 +609,7 @@ const AnimatedTorus = () => {
       </div>
 
       {/* Camera Orientation - Mobile */}
-      <div className="absolute top-4 left-4 lg:hidden block text-white font-mono text-xs bg-black bg-opacity-70 p-2 rounded-lg">
+      <div className="absolute bottom-4 left-4 lg:hidden block text-white font-mono text-xs bg-black bg-opacity-70 p-2 rounded-lg">
         <div className="text-center">
           <div className="text-gray-400 text-xs mb-1">Camera</div>
           <div className="text-white text-xs">
