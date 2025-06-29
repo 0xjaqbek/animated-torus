@@ -20,48 +20,48 @@ const AnimatedTorus = () => {
   const [poloidalSpeed, setPoloidalSpeed] = useState(0);
   const [rotationalSpeed, setRotationalSpeed] = useState(0);
 
-  // Music player state
+  // Music player state (ADDED)
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const audioRef = useRef(null);
 
-    // Get the base URL for production deployment
+  // Get the base URL for production deployment (ADDED)
   const getAssetUrl = (filename) => {
     const base = import.meta.env.BASE_URL || '/';
     return `${base}${filename}`;
   };
 
-  // Placeholder songs - you can edit these links and titles later
+  // Placeholder songs (ADDED)
   const songs = [
     {
       title: "jedynka",
       artist: "Pronoia",
-      url: getAssetUrl("AUD-20241228-WA0000.mp3") // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0000.mp3")
     },
     {
       title: "dwojka", 
       artist: "Pronoia",
-      url: getAssetUrl("AUD-20241228-WA0001.mp3") // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0001.mp3")
     },
     {
       title: "trzeci",
       artist: "Pronoia", 
-      url: getAssetUrl("AUD-20241228-WA0002.mp3") // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0002.mp3")
     },
-        {
+    {
       title: "damiana",
       artist: "Pronoia",
-      url: getAssetUrl("AUD-20241228-WA0003.mp3") // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0003.mp3")
     },
     {
       title: "siaja", 
       artist: "Pronoia",
-      url: getAssetUrl("AUD-20241228-WA0004.mp3") // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0004.mp3")
     },
     {
       title: "ośem",
       artist: "Pronoia", 
-      url: getAssetUrl("AUD-20241228-WA0005.mp3") // Replace with your song URL
+      url: getAssetUrl("AUD-20241228-WA0005.mp3")
     }
   ];
 
@@ -150,7 +150,7 @@ const AnimatedTorus = () => {
     rotationalSpeedRef.current = newSpeed;
   }, []);
 
-  // Music control functions
+  // Music control functions (ADDED)
   const togglePlayPause = useCallback(() => {
     if (audioRef.current) {
       if (isPlaying) {
@@ -163,27 +163,35 @@ const AnimatedTorus = () => {
   }, [isPlaying]);
 
   const nextSong = useCallback(() => {
+    // Pause current song and reset play button
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setIsPlaying(false);
+    
+    // Change to next song
     const nextIndex = (currentSongIndex + 1) % songs.length;
     setCurrentSongIndex(nextIndex);
-    if (isPlaying && audioRef.current) {
-      audioRef.current.play().catch(console.error);
-    }
-  }, [currentSongIndex, songs.length, isPlaying]);
+  }, [currentSongIndex, songs.length]);
 
   const previousSong = useCallback(() => {
+    // Pause current song and reset play button
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setIsPlaying(false);
+    
+    // Change to previous song
     const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
     setCurrentSongIndex(prevIndex);
-    if (isPlaying && audioRef.current) {
-      audioRef.current.play().catch(console.error);
-    }
-  }, [currentSongIndex, songs.length, isPlaying]);
+  }, [currentSongIndex, songs.length]);
 
   const handleSongEnd = useCallback(() => {
     nextSong();
   }, [nextSong]);
 
   useEffect(() => {
-    // Initialize ref values
+    // Inicjalizuj ref values
     poloidalSpeedRef.current = 0;
     rotationalSpeedRef.current = 0;
     
@@ -212,15 +220,15 @@ const AnimatedTorus = () => {
       mountRef.current.appendChild(renderer.domElement);
     }
 
-    // Torus geometry
+    // Torus geometry - zwiększam segmenty dla płynniejszej animacji
     const torusGeometry = new THREE.TorusGeometry(1, 0.4, 32, 100);
     
-    // Store original positions
+    // Zachowaj oryginalne pozycje wierzchołków
     const originalPositions = torusGeometry.attributes.position.array.slice();
     
-    // Detect touch device and adjust line width
+    // Wykryj ekran dotykowy i dostosuj grubość linii
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const lineWidth = isTouchDevice ? 1 : 2;
+    const lineWidth = isTouchDevice ? 1 : 2; // Cieńsze linie na ekranach dotykowych
     
     // Wireframe material
     const torusMaterial = new THREE.MeshBasicMaterial({
@@ -235,7 +243,7 @@ const AnimatedTorus = () => {
     torusRef.current = torus;
 
     // Initial camera position
-    camera.position.set(0, 0, 5);
+    camera.position.set(0, 0, zoom);
     camera.lookAt(0, 0, 0);
 
     // Animation variables
@@ -245,20 +253,24 @@ const AnimatedTorus = () => {
     const animate = () => {
       time += 0.02;
 
+      // WERSJA 15 rotacja + idealny ruch poloidalny
       if (torusRef.current) {
         const geometry = torusRef.current.geometry;
         const positions = geometry.attributes.position.array;
         
         for (let i = 0; i < positions.length; i += 3) {
+          // Pobierz oryginalne pozycje
           const origX = originalPositions[i];
           const origY = originalPositions[i + 1];
           const origZ = originalPositions[i + 2];
           
+          // WERSJA 15: Lekka rotacja wokół osi Z (przeciwny kierunek)
           const mainRadius = Math.sqrt(origX * origX + origY * origY);
-          const rotationSpeed = -time * rotationalSpeedRef.current + mainRadius * 1.5;
+          const rotationSpeed = -time * rotationalSpeedRef.current + mainRadius * 1.5; // minus dla przeciwnego kierunku
           const cosAngle = Math.cos(rotationSpeed);
           const sinAngle = Math.sin(rotationSpeed);
           
+          // Ruch poloidalny w płaszczyźnie R-Z (zachowany idealny)
           const toroidalAngle = Math.atan2(origY, origX);
           
           const tubeCenter = 1.0;
@@ -268,22 +280,24 @@ const AnimatedTorus = () => {
           const tubeRadius = Math.sqrt(tubeRadial * tubeRadial + tubeVertical * tubeVertical);
           const poloidalAngle = Math.atan2(tubeVertical, tubeRadial);
           
-          const poloidalRotation = time * poloidalSpeedRef.current;
+          const poloidalRotation = time * poloidalSpeedRef.current; // usuń fazowanie dla równomierności
           const newPoloidalAngle = poloidalAngle + poloidalRotation;
           
           const newTubeRadial = tubeRadius * Math.cos(newPoloidalAngle);
           const newTubeVertical = tubeRadius * Math.sin(newPoloidalAngle);
           const newMainRadius = tubeCenter + newTubeRadial;
           
+          // Najpierw poloidalny, potem rotacja Z
           const poloidalX = newMainRadius * Math.cos(toroidalAngle);
           const poloidalY = newMainRadius * Math.sin(toroidalAngle);
           
+          // Zastosuj lekkę rotację wokół osi Z
           const finalX = poloidalX * cosAngle - poloidalY * sinAngle;
           const finalY = poloidalX * sinAngle + poloidalY * cosAngle;
           
-          positions[i] = finalX;
-          positions[i + 1] = finalY;
-          positions[i + 2] = newTubeVertical;
+          positions[i] = finalX;              // X
+          positions[i + 1] = finalY;          // Y  
+          positions[i + 2] = newTubeVertical; // Z
         }
         
         geometry.attributes.position.needsUpdate = true;
@@ -329,22 +343,26 @@ const AnimatedTorus = () => {
     const canvas = rendererRef.current?.domElement;
     if (!canvas) return;
 
+    // Mouse events
     canvas.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', handleMouseUp);
 
+    // Touch events
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
     canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
     return () => {
+      // Mouse events cleanup
       canvas.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('mouseleave', handleMouseUp);
 
+      // Touch events cleanup
       canvas.removeEventListener('touchstart', handleTouchStart);
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
@@ -355,8 +373,8 @@ const AnimatedTorus = () => {
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing touch-none" />
-
-      {/* Audio element */}
+      
+      {/* Audio element (ADDED) */}
       <audio 
         ref={audioRef}
         src={songs[currentSongIndex].url}
@@ -364,7 +382,7 @@ const AnimatedTorus = () => {
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
       />
-      
+
       {/* Control sliders - horizontal at top */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 p-4 rounded-lg">
         <div className="flex space-x-6 items-center">
@@ -421,8 +439,9 @@ const AnimatedTorus = () => {
         </div>
       </div>
 
-      {/* Music Player */}
-      <div className="absolute top-4 right-4 bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
+      {/* Music Player - Desktop: top-right, Mobile: bottom-center (ADDED) */}
+      <div className="absolute top-4 right-4 lg:block hidden bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
+        {/* Desktop Music Player */}
         {/* Song Info */}
         <div className="text-center mb-3 min-w-[200px]">
           <div className="flex items-center justify-center mb-2">
@@ -468,12 +487,78 @@ const AnimatedTorus = () => {
           </button>
         </div>
       </div>
+
+      {/* Mobile Music Player - Bottom (ADDED) */}
+      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 lg:hidden block bg-black bg-opacity-90 p-3 rounded-lg border border-gray-600 w-11/12 max-w-sm">
+        {/* Mobile Song Info - Compact */}
+        <div className="text-center mb-2">
+          <div className="flex items-center justify-center mb-1">
+            <Music size={14} className="text-white mr-2" />
+            <span className="text-white text-xs font-mono">Now Playing</span>
+          </div>
+          <div className="text-white text-sm font-medium mb-1 truncate">
+            {songs[currentSongIndex].title}
+          </div>
+          <div className="text-gray-400 text-xs truncate">
+            {songs[currentSongIndex].artist}
+          </div>
+        </div>
+        
+        {/* Mobile Music Controls - Compact */}
+        <div className="flex items-center justify-center space-x-4">
+          <button
+            onClick={previousSong}
+            className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors"
+            title="Previous"
+          >
+            <SkipBack size={16} className="text-white" />
+          </button>
+          
+          <button
+            onClick={togglePlayPause}
+            className="p-2 rounded-full bg-white hover:bg-gray-200 transition-colors"
+            title={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? (
+              <Pause size={18} className="text-black" />
+            ) : (
+              <Play size={18} className="text-black ml-0.5" />
+            )}
+          </button>
+          
+          <button
+            onClick={nextSong}
+            className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors"
+            title="Next"
+          >
+            <SkipForward size={16} className="text-white" />
+          </button>
+        </div>
+      </div>
       
-      {/* Instructions */}
-      <div className="absolute bottom-4 left-4 text-white font-mono text-sm bg-black bg-opacity-70 p-3 rounded-lg">
-        <div className="font-semibold mb-2">Interaktywny Torus</div>
-        <div className="text-gray-300 text-xs">
-          🖱️ Kliknij i przeciągnij / 👆 Dotknij i przeciągnij - obracaj widok
+      {/* Camera Orientation - Desktop */}
+      <div className="absolute bottom-4 left-4 lg:block hidden text-white font-mono text-sm bg-black bg-opacity-70 p-3 rounded-lg">
+        <div className="text-center">
+          <div className="text-gray-400 text-xs mb-1">Camera</div>
+          <div className="text-white text-xs">
+            X: {(cameraRotation.x * 180 / Math.PI).toFixed(1)}°
+          </div>
+          <div className="text-white text-xs">
+            Y: {(cameraRotation.y * 180 / Math.PI).toFixed(1)}°
+          </div>
+        </div>
+      </div>
+
+      {/* Camera Orientation - Mobile */}
+      <div className="absolute top-4 left-4 lg:hidden block text-white font-mono text-xs bg-black bg-opacity-70 p-2 rounded-lg">
+        <div className="text-center">
+          <div className="text-gray-400 text-xs mb-1">Camera</div>
+          <div className="text-white text-xs">
+            X: {(cameraRotation.x * 180 / Math.PI).toFixed(1)}°
+          </div>
+          <div className="text-white text-xs">
+            Y: {(cameraRotation.y * 180 / Math.PI).toFixed(1)}°
+          </div>
         </div>
       </div>
 
