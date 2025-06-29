@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { Play, Pause, SkipBack, SkipForward, Music } from 'lucide-react';
 
 const AnimatedTorus = () => {
   const mountRef = useRef(null);
@@ -18,6 +19,30 @@ const AnimatedTorus = () => {
   const [zoom, setZoom] = useState(5);
   const [poloidalSpeed, setPoloidalSpeed] = useState(0);
   const [rotationalSpeed, setRotationalSpeed] = useState(0);
+
+  // Music player state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentSongIndex, setCurrentSongIndex] = useState(0);
+  const audioRef = useRef(null);
+
+  // Placeholder songs - you can edit these links and titles later
+  const songs = [
+    {
+      title: "OŚem",
+      artist: "Pronoia",
+      url: "./src/assets/default.mp3" // Replace with your song URL
+    },
+    {
+      title: "Song Title 2", 
+      artist: "Artist Name",
+      url: "path/to/your/song2.mp3" // Replace with your song URL
+    },
+    {
+      title: "Song Title 3",
+      artist: "Artist Name", 
+      url: "path/to/your/song3.mp3" // Replace with your song URL
+    }
+  ];
 
   // Update camera position based on rotation and zoom
   const updateCamera = useCallback(() => {
@@ -104,8 +129,40 @@ const AnimatedTorus = () => {
     rotationalSpeedRef.current = newSpeed;
   }, []);
 
+  // Music control functions
+  const togglePlayPause = useCallback(() => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(console.error);
+      }
+      setIsPlaying(!isPlaying);
+    }
+  }, [isPlaying]);
+
+  const nextSong = useCallback(() => {
+    const nextIndex = (currentSongIndex + 1) % songs.length;
+    setCurrentSongIndex(nextIndex);
+    if (isPlaying && audioRef.current) {
+      audioRef.current.play().catch(console.error);
+    }
+  }, [currentSongIndex, songs.length, isPlaying]);
+
+  const previousSong = useCallback(() => {
+    const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
+    setCurrentSongIndex(prevIndex);
+    if (isPlaying && audioRef.current) {
+      audioRef.current.play().catch(console.error);
+    }
+  }, [currentSongIndex, songs.length, isPlaying]);
+
+  const handleSongEnd = useCallback(() => {
+    nextSong();
+  }, [nextSong]);
+
   useEffect(() => {
-    // Inicjalizuj ref values
+    // Initialize ref values
     poloidalSpeedRef.current = 0;
     rotationalSpeedRef.current = 0;
     
@@ -134,15 +191,15 @@ const AnimatedTorus = () => {
       mountRef.current.appendChild(renderer.domElement);
     }
 
-    // Torus geometry - zwiększam segmenty dla płynniejszej animacji
+    // Torus geometry
     const torusGeometry = new THREE.TorusGeometry(1, 0.4, 32, 100);
     
-    // Zachowaj oryginalne pozycje wierzchołków
+    // Store original positions
     const originalPositions = torusGeometry.attributes.position.array.slice();
     
-    // Wykryj ekran dotykowy i dostosuj grubość linii
+    // Detect touch device and adjust line width
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    const lineWidth = isTouchDevice ? 1 : 2; // Cieńsze linie na ekranach dotykowych
+    const lineWidth = isTouchDevice ? 1 : 2;
     
     // Wireframe material
     const torusMaterial = new THREE.MeshBasicMaterial({
@@ -157,7 +214,7 @@ const AnimatedTorus = () => {
     torusRef.current = torus;
 
     // Initial camera position
-    camera.position.set(0, 0, zoom);
+    camera.position.set(0, 0, 5);
     camera.lookAt(0, 0, 0);
 
     // Animation variables
@@ -167,24 +224,20 @@ const AnimatedTorus = () => {
     const animate = () => {
       time += 0.02;
 
-      // WERSJA 15 rotacja + idealny ruch poloidalny
       if (torusRef.current) {
         const geometry = torusRef.current.geometry;
         const positions = geometry.attributes.position.array;
         
         for (let i = 0; i < positions.length; i += 3) {
-          // Pobierz oryginalne pozycje
           const origX = originalPositions[i];
           const origY = originalPositions[i + 1];
           const origZ = originalPositions[i + 2];
           
-          // WERSJA 15: Lekka rotacja wokół osi Z (przeciwny kierunek)
           const mainRadius = Math.sqrt(origX * origX + origY * origY);
-          const rotationSpeed = -time * rotationalSpeedRef.current + mainRadius * 1.5; // minus dla przeciwnego kierunku
+          const rotationSpeed = -time * rotationalSpeedRef.current + mainRadius * 1.5;
           const cosAngle = Math.cos(rotationSpeed);
           const sinAngle = Math.sin(rotationSpeed);
           
-          // Ruch poloidalny w płaszczyźnie R-Z (zachowany idealny)
           const toroidalAngle = Math.atan2(origY, origX);
           
           const tubeCenter = 1.0;
@@ -194,24 +247,22 @@ const AnimatedTorus = () => {
           const tubeRadius = Math.sqrt(tubeRadial * tubeRadial + tubeVertical * tubeVertical);
           const poloidalAngle = Math.atan2(tubeVertical, tubeRadial);
           
-          const poloidalRotation = time * poloidalSpeedRef.current; // usuń fazowanie dla równomierności
+          const poloidalRotation = time * poloidalSpeedRef.current;
           const newPoloidalAngle = poloidalAngle + poloidalRotation;
           
           const newTubeRadial = tubeRadius * Math.cos(newPoloidalAngle);
           const newTubeVertical = tubeRadius * Math.sin(newPoloidalAngle);
           const newMainRadius = tubeCenter + newTubeRadial;
           
-          // Najpierw poloidalny, potem rotacja Z
           const poloidalX = newMainRadius * Math.cos(toroidalAngle);
           const poloidalY = newMainRadius * Math.sin(toroidalAngle);
           
-          // Zastosuj lekkę rotację wokół osi Z
           const finalX = poloidalX * cosAngle - poloidalY * sinAngle;
           const finalY = poloidalX * sinAngle + poloidalY * cosAngle;
           
-          positions[i] = finalX;              // X
-          positions[i + 1] = finalY;          // Y  
-          positions[i + 2] = newTubeVertical; // Z
+          positions[i] = finalX;
+          positions[i + 1] = finalY;
+          positions[i + 2] = newTubeVertical;
         }
         
         geometry.attributes.position.needsUpdate = true;
@@ -257,26 +308,22 @@ const AnimatedTorus = () => {
     const canvas = rendererRef.current?.domElement;
     if (!canvas) return;
 
-    // Mouse events
     canvas.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', handleMouseUp);
 
-    // Touch events
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
     canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
     return () => {
-      // Mouse events cleanup
       canvas.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('mouseleave', handleMouseUp);
 
-      // Touch events cleanup
       canvas.removeEventListener('touchstart', handleTouchStart);
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchend', handleTouchEnd);
@@ -287,6 +334,15 @@ const AnimatedTorus = () => {
   return (
     <div className="w-full h-screen bg-black overflow-hidden relative">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing touch-none" />
+
+      {/* Audio element */}
+      <audio 
+        ref={audioRef}
+        src={songs[currentSongIndex].url}
+        onEnded={handleSongEnd}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+      />
       
       {/* Control sliders - horizontal at top */}
       <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-70 p-4 rounded-lg">
@@ -341,6 +397,54 @@ const AnimatedTorus = () => {
               {rotationalSpeed.toFixed(2)}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Music Player */}
+      <div className="absolute top-4 right-4 bg-black bg-opacity-80 p-4 rounded-lg border border-gray-600">
+        {/* Song Info */}
+        <div className="text-center mb-3 min-w-[200px]">
+          <div className="flex items-center justify-center mb-2">
+            <Music size={16} className="text-white mr-2" />
+            <span className="text-white text-sm font-mono">Now Playing</span>
+          </div>
+          <div className="text-white text-sm font-medium mb-1">
+            {songs[currentSongIndex].title}
+          </div>
+          <div className="text-gray-400 text-xs">
+            {songs[currentSongIndex].artist}
+          </div>
+        </div>
+        
+        {/* Music Controls */}
+        <div className="flex items-center justify-center space-x-3">
+          <button
+            onClick={previousSong}
+            className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors"
+            title="Previous"
+          >
+            <SkipBack size={18} className="text-white" />
+          </button>
+          
+          <button
+            onClick={togglePlayPause}
+            className="p-3 rounded-full bg-white hover:bg-gray-200 transition-colors"
+            title={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? (
+              <Pause size={20} className="text-black" />
+            ) : (
+              <Play size={20} className="text-black ml-1" />
+            )}
+          </button>
+          
+          <button
+            onClick={nextSong}
+            className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors"
+            title="Next"
+          >
+            <SkipForward size={18} className="text-white" />
+          </button>
         </div>
       </div>
       
