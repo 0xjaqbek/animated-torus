@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { Play, Pause, SkipBack, SkipForward, Music } from 'lucide-react';
+import { ColorSystem } from './ColorSystem.js';
 
 const AnimatedTorus = () => {
   const mountRef = useRef(null);
@@ -12,6 +13,8 @@ const AnimatedTorus = () => {
   const poloidalSpeedRef = useRef(0);
   const rotationalSpeedRef = useRef(0);
   const transitionRef = useRef(null);
+  const colorSystemRef = useRef(null);
+  const torusColorsRef = useRef(null);
   
   // Mouse controls state
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -36,7 +39,6 @@ const AnimatedTorus = () => {
   const autoTransitionRef = useRef(null);
   const autoAnimationStartTime = useRef(null);
   const autoTransitionStartTime = useRef(null);
-  const songStartTime = useRef(null);
   const baseRotation = useRef({ x: 0, y: 0 });
   const baseZoom = useRef(5);
 
@@ -432,7 +434,11 @@ const AnimatedTorus = () => {
         // Start playing and begin transition immediately
         audioRef.current.play().then(() => {
           setIsPlaying(true);
-          songStartTime.current = Date.now();
+          
+          // Initialize beat detection for the current audio element
+          if (colorSystemRef.current) {
+            colorSystemRef.current.initializeBeatDetection(audioRef.current);
+          }
           
           console.log('Song started, beginning immediate transition to torus + auto-animation!'); // Debug log
           
@@ -449,9 +455,12 @@ const AnimatedTorus = () => {
     }
     setIsPlaying(false);
     stopAutoAnimation();
-    songStartTime.current = null;
     const nextIndex = (currentSongIndex + 1) % songs.length;
     setCurrentSongIndex(nextIndex);
+    // Start color transition to new song
+    if (colorSystemRef.current) {
+      colorSystemRef.current.startSongTransition(nextIndex);
+    }
   }, [currentSongIndex, songs.length, stopAutoAnimation]);
 
   const previousSong = useCallback(() => {
@@ -460,9 +469,12 @@ const AnimatedTorus = () => {
     }
     setIsPlaying(false);
     stopAutoAnimation();
-    songStartTime.current = null;
     const prevIndex = (currentSongIndex - 1 + songs.length) % songs.length;
     setCurrentSongIndex(prevIndex);
+    // Start color transition to new song
+    if (colorSystemRef.current) {
+      colorSystemRef.current.startSongTransition(prevIndex);
+    }
   }, [currentSongIndex, songs.length, stopAutoAnimation]);
 
   const handleSongEnd = useCallback(() => {
@@ -504,11 +516,18 @@ const AnimatedTorus = () => {
     const torusGeometry = new THREE.TorusGeometry(1, 0.4, 32, 100);
     const originalPositions = torusGeometry.attributes.position.array.slice();
     
+    // Initialize color system
+    colorSystemRef.current = new ColorSystem(scene);
+    
+    // Add colors to torus geometry
+    const torusColors = colorSystemRef.current.addColorsToTorus(torusGeometry);
+    torusColorsRef.current = torusColors;
+    
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     const lineWidth = isTouchDevice ? 1 : 2;
     
     const torusMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+      vertexColors: true, // Enable vertex colors
       wireframe: true,
       wireframeLinewidth: lineWidth
     });
@@ -570,6 +589,12 @@ const AnimatedTorus = () => {
         }
         
         geometry.attributes.position.needsUpdate = true;
+        
+        // Update color system with beat detection
+        if (colorSystemRef.current && torusColorsRef.current) {
+          colorSystemRef.current.update(time, geometry, torusColorsRef.current);
+          geometry.attributes.color.needsUpdate = true;
+        }
       }
 
       renderer.render(scene, camera);
@@ -604,6 +629,9 @@ const AnimatedTorus = () => {
       }
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
+      }
+      if (colorSystemRef.current) {
+        colorSystemRef.current.dispose();
       }
       renderer.dispose();
       torusGeometry.dispose();
@@ -819,6 +847,9 @@ const AnimatedTorus = () => {
             {(isAutoAnimating || isTransitioningToAuto) && (
               <span className="ml-2 text-green-400 text-xs animate-pulse">●</span>
             )}
+            {colorSystemRef.current?.getBeatData()?.isBeating && (
+              <span className="ml-2 text-red-400 text-xs">♪</span>
+            )}
           </div>
           <div className="text-white text-xs">
             X: {(cameraRotation.x * 180 / Math.PI).toFixed(1)}°
@@ -842,6 +873,9 @@ const AnimatedTorus = () => {
             Camera
             {(isAutoAnimating || isTransitioningToAuto) && (
               <span className="ml-1 text-green-400 text-xs animate-pulse">●</span>
+            )}
+            {colorSystemRef.current?.getBeatData()?.isBeating && (
+              <span className="ml-1 text-red-400 text-xs">♪</span>
             )}
           </div>
           <div className="text-white text-xs">
